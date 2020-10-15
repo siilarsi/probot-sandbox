@@ -1,10 +1,7 @@
 const nock = require('nock')
-// Requiring our app implementation
 const myProbotApp = require('..')
 const { Probot, ProbotOctokit } = require('probot')
-// Requiring our fixtures
 const payload = require('./fixtures/issues.opened')
-const issueCreatedBody = { body: 'Thanks for opening this issue!' }
 const fs = require('fs')
 const path = require('path')
 
@@ -18,36 +15,36 @@ describe('My Probot app', () => {
     probot = new Probot({
       id: 123,
       privateKey,
-      // disable request throttling and retries for testing
       Octokit: ProbotOctokit.defaults({
         retry: { enabled: false },
         throttle: { enabled: false }
       })
     })
-    // Load our app into probot
     probot.load(myProbotApp)
   })
 
   test('creates a comment when an issue is opened', async () => {
+    const encodedContent = Buffer.from(`subscribe: true`).toString('base64')
     const mock = nock('https://api.github.com')
+        .post('/app/installations/2/access_tokens')
+        .reply(200, {
+          token: 'test',
+          permissions: {
+            issues: 'write'
+          }
+        })
+        .post('/repos/hiimbex/testing-things/issues/1/comments')
+        .reply(200)
+        .get('/repos/hiimbex/testing-things/contents/.github%2Fsample.yaml')
+        .reply(200, {
+          type: 'file',
+          encoding: 'base64',
+          size: encodedContent.length,
+          name: 'sample.yaml',
+          path: '.github/contents/.github/sample.yaml',
+          content: encodedContent
+        })
 
-      // Test that we correctly return a test token
-      .post('/app/installations/2/access_tokens')
-      .reply(200, {
-        token: 'test',
-        permissions: {
-          issues: 'write'
-        }
-      })
-
-      // Test that a comment is posted
-      .post('/repos/hiimbex/testing-things/issues/1/comments', (body) => {
-        expect(body).toMatchObject(issueCreatedBody)
-        return true
-      })
-      .reply(200)
-
-    // Receive a webhook event
     await probot.receive({ name: 'issues', payload })
 
     expect(mock.pendingMocks()).toStrictEqual([])
@@ -58,9 +55,3 @@ describe('My Probot app', () => {
     nock.enableNetConnect()
   })
 })
-
-// For more information about testing with Jest see:
-// https://facebook.github.io/jest/
-
-// For more information about testing with Nock see:
-// https://github.com/nock/nock
